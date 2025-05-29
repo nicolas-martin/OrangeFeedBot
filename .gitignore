@@ -10,6 +10,7 @@ truthsocial-bot-*
 *.exe
 dist/
 build/
+bin/
 
 # Go specific
 *.mod.sum

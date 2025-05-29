@@ -10,29 +10,28 @@ Post: "%s"
 
 Required JSON format:
 {
-  "summary": "1-sentence market impact summary",
+  "summary": "1 concise sentence (max 80 chars)",
   "market_impact": "bullish/bearish/neutral", 
   "confidence": 0.0-1.0,
-  "key_points": ["max 3 key market drivers"],
-  "affected_sectors": ["max 3 sectors"],
-  "specific_stocks": ["max 5 ticker symbols"],
+  "key_points": ["max 2 brief points"],
+  "affected_sectors": ["max 2 sectors"],
+  "specific_stocks": ["max 3 ticker symbols"],
   "trading_signal": "buy/sell/hold/watch",
   "time_horizon": "immediate/short-term/medium-term/long-term",
   "risk_level": "low/medium/high",
   "expected_magnitude": "minimal/moderate/significant/major",
-  "actionable_insights": ["max 2 specific trading actions"]
+  "actionable_insights": ["1 brief trading action (max 60 chars)"]
 }
 
 Focus on:
 - Direct company/sector mentions
 - Policy implications (trade, regulation, rates)
-- Historical market reactions to similar statements
 - Specific actionable trades
 
-Be concise but precise. If minimal impact, state clearly.`, content)
+Be extremely concise. Chat format requires brevity.`, content)
 }
 
 // SystemPrompt returns the system prompt for the AI analyst
 func SystemPrompt() string {
-	return "You are a senior quantitative analyst at Goldman Sachs. Provide concise, actionable market analysis with specific trading recommendations. Focus on immediate market impact and concrete trading opportunities."
+	return "You are a senior quantitative analyst. Provide ultra-concise market analysis for chat format. Keep all responses brief and actionable. Focus on immediate impact and specific trades."
 }

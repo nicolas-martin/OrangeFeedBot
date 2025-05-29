@@ -205,64 +205,67 @@ func (b *OrangeFeedBot) checkForNewPosts() {
 func (b *OrangeFeedBot) sendAnalysis(status truthsocial.Status, analysis *analyzer.Analysis) {
 	content := b.cleanContent(status.Content)
 
-	// Create comprehensive analysis message
-	message := fmt.Sprintf(`🚨 *NEW POST ANALYSIS*
+	// Create concise analysis message
+	message := fmt.Sprintf(`🚨 *NEW POST* | %s (%.0f%%)
 
-📝 *Post Content:*
-%s
+📝 %s
 
-📊 *MARKET ANALYSIS:*
-🎯 Impact: *%s* (%.0f%% confidence)
-📈 Signal: *%s*
-⏰ Horizon: %s
-⚠️ Risk: %s
-📏 Magnitude: %s
+📊 %s %s | %s | %s risk
+🏭 %s | 📈 %s
 
-📝 *Summary:*
-%s`,
-		b.escapeMarkdown(content),
+💡 %s`,
 		strings.ToUpper(analysis.MarketImpact),
 		analysis.Confidence*100,
+		b.escapeMarkdown(content),
+		getSignalEmoji(analysis.TradingSignal),
 		strings.ToUpper(analysis.TradingSignal),
 		analysis.TimeHorizon,
 		strings.ToUpper(analysis.RiskLevel),
-		analysis.ExpectedMagnitude,
+		formatList(analysis.AffectedSectors, 2),
+		formatList(analysis.SpecificStocks, 3),
 		b.escapeMarkdown(analysis.Summary))
 
-	// Add key points
-	if len(analysis.KeyPoints) > 0 {
-		message += "\n\n🔑 *Key Points:*\n"
-		for _, point := range analysis.KeyPoints {
-			message += fmt.Sprintf("• %s\n", b.escapeMarkdown(point))
-		}
+	// Add actionable insights if available (keep it very short)
+	if len(analysis.ActionableInsights) > 0 && len(analysis.ActionableInsights[0]) > 0 {
+		message += fmt.Sprintf("\n⚡ %s", b.escapeMarkdown(analysis.ActionableInsights[0]))
 	}
 
-	// Add affected sectors
-	if len(analysis.AffectedSectors) > 0 {
-		message += fmt.Sprintf("\n🏭 *Sectors:* %s", strings.Join(analysis.AffectedSectors, ", "))
-	}
-
-	// Add specific stocks
-	if len(analysis.SpecificStocks) > 0 {
-		message += fmt.Sprintf("\n📈 *Stocks:* %s", strings.Join(analysis.SpecificStocks, ", "))
-	}
-
-	// Add actionable insights
-	if len(analysis.ActionableInsights) > 0 {
-		message += "\n\n💡 *TRADING INSIGHTS:*\n"
-		for i, insight := range analysis.ActionableInsights {
-			message += fmt.Sprintf("%d. %s\n", i+1, b.escapeMarkdown(insight))
-		}
-	}
-
-	// Add post metadata
-	message += fmt.Sprintf("\n\n🔗 [View Post](%s)\n📅 %s\n👍 %d likes | 🔄 %d reblogs",
+	// Add minimal post metadata
+	message += fmt.Sprintf("\n\n🔗 [View](%s) | 👍 %d | 🔄 %d",
 		status.URL,
-		status.CreatedAt,
 		status.FavouritesCount,
 		status.ReblogsCount)
 
 	b.sendMessage(message)
+}
+
+// Helper function to get emoji for trading signal
+func getSignalEmoji(signal string) string {
+	switch strings.ToLower(signal) {
+	case "buy":
+		return "🟢"
+	case "sell":
+		return "🔴"
+	case "hold":
+		return "🟡"
+	case "watch":
+		return "👀"
+	default:
+		return "⚪"
+	}
+}
+
+// Helper function to format lists concisely
+func formatList(items []string, maxItems int) string {
+	if len(items) == 0 {
+		return "None"
+	}
+
+	if len(items) <= maxItems {
+		return strings.Join(items, ", ")
+	}
+
+	return strings.Join(items[:maxItems], ", ") + fmt.Sprintf(" +%d", len(items)-maxItems)
 }
 
 func (b *OrangeFeedBot) sendMessage(text string) {

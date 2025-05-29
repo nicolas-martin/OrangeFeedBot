@@ -167,36 +167,56 @@ func analyzePostsWithAI(statuses []truthsocial.Status, openaiKey string) {
 			continue
 		}
 
-		// Display concise analysis
-		fmt.Printf("\n📊 CONCISE MARKET ANALYSIS:\n")
-		fmt.Printf("   🎯 Impact: %s (%.0f%% confidence)\n", strings.ToUpper(analysis.MarketImpact), analysis.Confidence*100)
-		fmt.Printf("   📈 Signal: %s | ⏰ Horizon: %s | ⚠️ Risk: %s\n",
-			strings.ToUpper(analysis.TradingSignal), analysis.TimeHorizon, strings.ToUpper(analysis.RiskLevel))
-		fmt.Printf("   📏 Magnitude: %s\n", analysis.ExpectedMagnitude)
+		// Display ultra-concise analysis (chat format)
+		fmt.Printf("\n🚨 %s (%.0f%%) | %s %s | %s risk\n",
+			strings.ToUpper(analysis.MarketImpact),
+			analysis.Confidence*100,
+			getSignalEmoji(analysis.TradingSignal),
+			strings.ToUpper(analysis.TradingSignal),
+			strings.ToUpper(analysis.RiskLevel))
 
-		fmt.Printf("\n📝 Summary: %s\n", analysis.Summary)
+		fmt.Printf("🏭 %s | 📈 %s\n",
+			formatList(analysis.AffectedSectors, 2),
+			formatList(analysis.SpecificStocks, 3))
 
-		if len(analysis.KeyPoints) > 0 {
-			fmt.Printf("\n🔑 Key Points: %s\n", strings.Join(analysis.KeyPoints, " • "))
+		fmt.Printf("💡 %s\n", analysis.Summary)
+
+		if len(analysis.ActionableInsights) > 0 && len(analysis.ActionableInsights[0]) > 0 {
+			fmt.Printf("⚡ %s\n", analysis.ActionableInsights[0])
 		}
 
-		if len(analysis.AffectedSectors) > 0 {
-			fmt.Printf("🏭 Sectors: %s\n", strings.Join(analysis.AffectedSectors, ", "))
-		}
-
-		if len(analysis.SpecificStocks) > 0 {
-			fmt.Printf("📈 Stocks: %s\n", strings.Join(analysis.SpecificStocks, ", "))
-		}
-
-		if len(analysis.ActionableInsights) > 0 {
-			fmt.Printf("\n💡 TRADING ACTIONS:\n")
-			for j, insight := range analysis.ActionableInsights {
-				fmt.Printf("   %d. %s\n", j+1, insight)
-			}
-		}
-
-		fmt.Printf("\n" + strings.Repeat("-", 50))
+		fmt.Printf("👍 %d | 🔄 %d\n", status.FavouritesCount, status.ReblogsCount)
+		fmt.Printf("\n" + strings.Repeat("-", 40))
 	}
+}
+
+// Helper function to get emoji for trading signal
+func getSignalEmoji(signal string) string {
+	switch strings.ToLower(signal) {
+	case "buy":
+		return "🟢"
+	case "sell":
+		return "🔴"
+	case "hold":
+		return "🟡"
+	case "watch":
+		return "👀"
+	default:
+		return "⚪"
+	}
+}
+
+// Helper function to format lists concisely
+func formatList(items []string, maxItems int) string {
+	if len(items) == 0 {
+		return "None"
+	}
+
+	if len(items) <= maxItems {
+		return strings.Join(items, ", ")
+	}
+
+	return strings.Join(items[:maxItems], ", ") + fmt.Sprintf(" +%d", len(items)-maxItems)
 }
 
 func analyzePost(client *openai.Client, content string) (*Analysis, error) {
