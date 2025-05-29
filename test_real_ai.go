@@ -16,11 +16,17 @@ import (
 )
 
 type Analysis struct {
-	Summary         string   `json:"summary"`
-	MarketImpact    string   `json:"market_impact"`
-	Confidence      float64  `json:"confidence"`
-	KeyPoints       []string `json:"key_points"`
-	AffectedSectors []string `json:"affected_sectors"`
+	Summary            string   `json:"summary"`
+	MarketImpact       string   `json:"market_impact"` // "bullish", "bearish", "neutral"
+	Confidence         float64  `json:"confidence"`    // 0.0-1.0
+	KeyPoints          []string `json:"key_points"`
+	AffectedSectors    []string `json:"affected_sectors"`
+	SpecificStocks     []string `json:"specific_stocks"`     // Ticker symbols mentioned or implied
+	TradingSignal      string   `json:"trading_signal"`      // "buy", "sell", "hold", "watch"
+	TimeHorizon        string   `json:"time_horizon"`        // "immediate", "short-term", "medium-term", "long-term"
+	RiskLevel          string   `json:"risk_level"`          // "low", "medium", "high"
+	ExpectedMagnitude  string   `json:"expected_magnitude"`  // "minimal", "moderate", "significant", "major"
+	ActionableInsights []string `json:"actionable_insights"` // Specific trading recommendations
 }
 
 func main() {
@@ -152,6 +158,7 @@ func analyzePostsWithAI(statuses []truthsocial.Status, openaiKey string) {
 		}
 
 		fmt.Printf("\n🔍 Analyzing Post %d...\n", i+1)
+		fmt.Printf("📝 Content: %s\n", content)
 
 		analysis, err := analyzePost(client, content)
 		if err != nil {
@@ -159,42 +166,88 @@ func analyzePostsWithAI(statuses []truthsocial.Status, openaiKey string) {
 			continue
 		}
 
-		fmt.Printf("📊 Market Impact: %s (Confidence: %.2f)\n", analysis.MarketImpact, analysis.Confidence)
-		fmt.Printf("📝 Summary: %s\n", analysis.Summary)
+		// Display comprehensive analysis
+		fmt.Printf("\n📊 MARKET ANALYSIS RESULTS:\n")
+		fmt.Printf("   🎯 Market Impact: %s (Confidence: %.1f%%)\n", strings.ToUpper(analysis.MarketImpact), analysis.Confidence*100)
+		fmt.Printf("   📈 Trading Signal: %s\n", strings.ToUpper(analysis.TradingSignal))
+		fmt.Printf("   ⏰ Time Horizon: %s\n", analysis.TimeHorizon)
+		fmt.Printf("   ⚠️  Risk Level: %s\n", strings.ToUpper(analysis.RiskLevel))
+		fmt.Printf("   📏 Expected Magnitude: %s\n", analysis.ExpectedMagnitude)
+
+		fmt.Printf("\n📝 Summary: %s\n", analysis.Summary)
+
 		if len(analysis.KeyPoints) > 0 {
-			fmt.Printf("🔑 Key Points: %v\n", analysis.KeyPoints)
+			fmt.Printf("\n🔑 Key Market-Moving Points:\n")
+			for _, point := range analysis.KeyPoints {
+				fmt.Printf("   • %s\n", point)
+			}
 		}
+
 		if len(analysis.AffectedSectors) > 0 {
-			fmt.Printf("🏭 Affected Sectors: %v\n", analysis.AffectedSectors)
+			fmt.Printf("\n🏭 Affected Sectors: %s\n", strings.Join(analysis.AffectedSectors, ", "))
 		}
+
+		if len(analysis.SpecificStocks) > 0 {
+			fmt.Printf("\n📈 Specific Stocks to Watch: %s\n", strings.Join(analysis.SpecificStocks, ", "))
+		}
+
+		if len(analysis.ActionableInsights) > 0 {
+			fmt.Printf("\n💡 ACTIONABLE TRADING INSIGHTS:\n")
+			for j, insight := range analysis.ActionableInsights {
+				fmt.Printf("   %d. %s\n", j+1, insight)
+			}
+		}
+
+		fmt.Printf("\n" + strings.Repeat("-", 60))
 	}
 }
 
 func analyzePost(client *openai.Client, content string) (*Analysis, error) {
 	prompt := fmt.Sprintf(`
-Analyze the following social media post for its potential impact on the stock market:
+You are a senior quantitative analyst at a top-tier investment bank. Analyze the following social media post from Donald Trump for its concrete impact on the stock market and provide specific trading recommendations.
 
 Post: "%s"
 
-Please provide a JSON response with the following structure:
+Provide a detailed JSON response with the following structure:
 {
-  "summary": "Brief summary of the post content",
-  "market_impact": "positive/negative/neutral",
+  "summary": "Brief summary of the post content and its market implications",
+  "market_impact": "bullish/bearish/neutral",
   "confidence": 0.0-1.0,
-  "key_points": ["key point 1", "key point 2"],
-  "affected_sectors": ["sector 1", "sector 2"]
+  "key_points": ["specific market-moving elements"],
+  "affected_sectors": ["Technology", "Healthcare", "Energy", etc.],
+  "specific_stocks": ["AAPL", "TSLA", "JPM", etc. - actual ticker symbols"],
+  "trading_signal": "buy/sell/hold/watch",
+  "time_horizon": "immediate/short-term/medium-term/long-term",
+  "risk_level": "low/medium/high",
+  "expected_magnitude": "minimal/moderate/significant/major",
+  "actionable_insights": ["specific trading recommendations with reasoning"]
 }
 
-Consider factors like:
-- Economic policy mentions
-- Trade relations
-- Regulatory changes
-- Company-specific mentions
-- Market sentiment language
-- Historical impact of similar statements
+Analysis Guidelines:
+1. **Specific Stocks**: Identify actual ticker symbols that would be directly affected
+2. **Trading Signal**: Provide clear buy/sell/hold/watch recommendations
+3. **Time Horizon**: 
+   - immediate (0-24 hours)
+   - short-term (1-7 days)
+   - medium-term (1-4 weeks)
+   - long-term (1+ months)
+4. **Expected Magnitude**: Quantify the expected market movement
+5. **Actionable Insights**: Provide specific trading strategies, entry/exit points, risk management
 
-Be objective and focus on potential market reactions rather than political opinions.
-Respond ONLY with valid JSON, no additional text or explanations.
+Consider these factors:
+- Direct company mentions or implications
+- Policy changes affecting specific industries
+- Trade relations and tariff impacts
+- Regulatory changes and their sector effects
+- Economic policy shifts
+- Geopolitical implications
+- Historical market reactions to similar statements
+- Current market conditions and sentiment
+- Sector rotation opportunities
+- Options strategies if appropriate
+
+Be specific and actionable. If the post has minimal market impact, state that clearly.
+Respond ONLY with valid JSON, no additional text.
 `, content)
 
 	resp, err := client.CreateChatCompletion(
@@ -204,14 +257,15 @@ Respond ONLY with valid JSON, no additional text or explanations.
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a financial analyst specializing in market sentiment analysis. Provide objective, data-driven analysis of social media posts and their potential market impact. Respond ONLY with valid JSON format.",
+					Content: "You are a senior quantitative analyst at Goldman Sachs with 15+ years of experience in political risk analysis and market impact assessment. You specialize in translating political events and statements into actionable trading strategies. Your analysis has consistently generated alpha for institutional clients. Provide concrete, specific, and actionable market analysis.",
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
 				},
 			},
-			Temperature: 0.3,
+			Temperature: 0.2,  // Lower temperature for more consistent analysis
+			MaxTokens:   1500, // Allow for more detailed responses
 		},
 	)
 
