@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"orangefeed/internal/prompts"
 	"orangefeed/internal/truthsocial"
 
 	"github.com/joho/godotenv"
@@ -35,7 +36,7 @@ func main() {
 		log.Printf("Warning: .env file not found: %v", err)
 	}
 
-	fmt.Println("🎯 OrangeFeed - Truth Social Real Data Scraper with uTLS")
+	fmt.Println("🎯 OrangeFeed - Truth Social Real Data Scraper with Enhanced AI")
 	fmt.Println(strings.Repeat("=", 70))
 
 	// Get credentials
@@ -48,13 +49,13 @@ func main() {
 	}
 
 	fmt.Printf("✅ Credentials loaded for user: %s\n", username)
-	fmt.Println("🔐 Using uTLS Chrome fingerprint spoofing to bypass Cloudflare")
+	fmt.Println("🔐 Using CycleTLS Chrome fingerprint spoofing to bypass Cloudflare")
 
-	// Create Truth Social client with uTLS
+	// Create Truth Social client with CycleTLS
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	fmt.Println("\n🌐 Creating Truth Social client with uTLS...")
+	fmt.Println("\n🌐 Creating Truth Social client with CycleTLS...")
 	client, err := truthsocial.NewClient(ctx, username, password)
 	if err != nil {
 		log.Fatalf("❌ Failed to create client: %v", err)
@@ -110,14 +111,14 @@ func main() {
 
 	// Analyze posts with AI if OpenAI key is available
 	if openaiKey != "" {
-		fmt.Println("\n🤖 Analyzing posts with AI...")
+		fmt.Println("\n🤖 Analyzing posts with Enhanced Concise AI...")
 		analyzePostsWithAI(statuses[:min(3, len(statuses))], openaiKey) // Analyze first 3 posts
 	} else {
 		fmt.Println("\n⚠️ No OPENAI_API_KEY found - skipping AI analysis")
 	}
 
 	fmt.Println("\n" + strings.Repeat("=", 70))
-	fmt.Println("🎉 Success! Real data extraction working with uTLS fingerprint spoofing!")
+	fmt.Println("🎉 Success! Real data extraction working with CycleTLS fingerprint spoofing!")
 	fmt.Printf("📊 Total posts fetched: %d\n", len(statuses))
 	fmt.Println("🔧 This proves our implementation bypasses Cloudflare protection")
 }
@@ -166,90 +167,39 @@ func analyzePostsWithAI(statuses []truthsocial.Status, openaiKey string) {
 			continue
 		}
 
-		// Display comprehensive analysis
-		fmt.Printf("\n📊 MARKET ANALYSIS RESULTS:\n")
-		fmt.Printf("   🎯 Market Impact: %s (Confidence: %.1f%%)\n", strings.ToUpper(analysis.MarketImpact), analysis.Confidence*100)
-		fmt.Printf("   📈 Trading Signal: %s\n", strings.ToUpper(analysis.TradingSignal))
-		fmt.Printf("   ⏰ Time Horizon: %s\n", analysis.TimeHorizon)
-		fmt.Printf("   ⚠️  Risk Level: %s\n", strings.ToUpper(analysis.RiskLevel))
-		fmt.Printf("   📏 Expected Magnitude: %s\n", analysis.ExpectedMagnitude)
+		// Display concise analysis
+		fmt.Printf("\n📊 CONCISE MARKET ANALYSIS:\n")
+		fmt.Printf("   🎯 Impact: %s (%.0f%% confidence)\n", strings.ToUpper(analysis.MarketImpact), analysis.Confidence*100)
+		fmt.Printf("   📈 Signal: %s | ⏰ Horizon: %s | ⚠️ Risk: %s\n",
+			strings.ToUpper(analysis.TradingSignal), analysis.TimeHorizon, strings.ToUpper(analysis.RiskLevel))
+		fmt.Printf("   📏 Magnitude: %s\n", analysis.ExpectedMagnitude)
 
 		fmt.Printf("\n📝 Summary: %s\n", analysis.Summary)
 
 		if len(analysis.KeyPoints) > 0 {
-			fmt.Printf("\n🔑 Key Market-Moving Points:\n")
-			for _, point := range analysis.KeyPoints {
-				fmt.Printf("   • %s\n", point)
-			}
+			fmt.Printf("\n🔑 Key Points: %s\n", strings.Join(analysis.KeyPoints, " • "))
 		}
 
 		if len(analysis.AffectedSectors) > 0 {
-			fmt.Printf("\n🏭 Affected Sectors: %s\n", strings.Join(analysis.AffectedSectors, ", "))
+			fmt.Printf("🏭 Sectors: %s\n", strings.Join(analysis.AffectedSectors, ", "))
 		}
 
 		if len(analysis.SpecificStocks) > 0 {
-			fmt.Printf("\n📈 Specific Stocks to Watch: %s\n", strings.Join(analysis.SpecificStocks, ", "))
+			fmt.Printf("📈 Stocks: %s\n", strings.Join(analysis.SpecificStocks, ", "))
 		}
 
 		if len(analysis.ActionableInsights) > 0 {
-			fmt.Printf("\n💡 ACTIONABLE TRADING INSIGHTS:\n")
+			fmt.Printf("\n💡 TRADING ACTIONS:\n")
 			for j, insight := range analysis.ActionableInsights {
 				fmt.Printf("   %d. %s\n", j+1, insight)
 			}
 		}
 
-		fmt.Printf("\n" + strings.Repeat("-", 60))
+		fmt.Printf("\n" + strings.Repeat("-", 50))
 	}
 }
 
 func analyzePost(client *openai.Client, content string) (*Analysis, error) {
-	prompt := fmt.Sprintf(`
-You are a senior quantitative analyst at a top-tier investment bank. Analyze the following social media post from Donald Trump for its concrete impact on the stock market and provide specific trading recommendations.
-
-Post: "%s"
-
-Provide a detailed JSON response with the following structure:
-{
-  "summary": "Brief summary of the post content and its market implications",
-  "market_impact": "bullish/bearish/neutral",
-  "confidence": 0.0-1.0,
-  "key_points": ["specific market-moving elements"],
-  "affected_sectors": ["Technology", "Healthcare", "Energy", etc.],
-  "specific_stocks": ["AAPL", "TSLA", "JPM", etc. - actual ticker symbols"],
-  "trading_signal": "buy/sell/hold/watch",
-  "time_horizon": "immediate/short-term/medium-term/long-term",
-  "risk_level": "low/medium/high",
-  "expected_magnitude": "minimal/moderate/significant/major",
-  "actionable_insights": ["specific trading recommendations with reasoning"]
-}
-
-Analysis Guidelines:
-1. **Specific Stocks**: Identify actual ticker symbols that would be directly affected
-2. **Trading Signal**: Provide clear buy/sell/hold/watch recommendations
-3. **Time Horizon**: 
-   - immediate (0-24 hours)
-   - short-term (1-7 days)
-   - medium-term (1-4 weeks)
-   - long-term (1+ months)
-4. **Expected Magnitude**: Quantify the expected market movement
-5. **Actionable Insights**: Provide specific trading strategies, entry/exit points, risk management
-
-Consider these factors:
-- Direct company mentions or implications
-- Policy changes affecting specific industries
-- Trade relations and tariff impacts
-- Regulatory changes and their sector effects
-- Economic policy shifts
-- Geopolitical implications
-- Historical market reactions to similar statements
-- Current market conditions and sentiment
-- Sector rotation opportunities
-- Options strategies if appropriate
-
-Be specific and actionable. If the post has minimal market impact, state that clearly.
-Respond ONLY with valid JSON, no additional text.
-`, content)
-
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
@@ -257,15 +207,15 @@ Respond ONLY with valid JSON, no additional text.
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a senior quantitative analyst at Goldman Sachs with 15+ years of experience in political risk analysis and market impact assessment. You specialize in translating political events and statements into actionable trading strategies. Your analysis has consistently generated alpha for institutional clients. Provide concrete, specific, and actionable market analysis.",
+					Content: prompts.SystemPrompt(),
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
+					Content: prompts.MarketAnalysisPrompt(content),
 				},
 			},
-			Temperature: 0.2,  // Lower temperature for more consistent analysis
-			MaxTokens:   1500, // Allow for more detailed responses
+			Temperature: 0.2, // Lower temperature for more consistent analysis
+			MaxTokens:   800, // Reduced for more concise responses
 		},
 	)
 
@@ -277,17 +227,17 @@ Respond ONLY with valid JSON, no additional text.
 		return nil, fmt.Errorf("no response from OpenAI")
 	}
 
-	content = resp.Choices[0].Message.Content
+	responseContent := resp.Choices[0].Message.Content
 
 	// Try to extract JSON from the response
-	jsonStart := strings.Index(content, "{")
-	jsonEnd := strings.LastIndex(content, "}") + 1
+	jsonStart := strings.Index(responseContent, "{")
+	jsonEnd := strings.LastIndex(responseContent, "}") + 1
 
 	if jsonStart == -1 || jsonEnd == 0 {
-		return nil, fmt.Errorf("no JSON found in response: %s", content)
+		return nil, fmt.Errorf("no JSON found in response: %s", responseContent)
 	}
 
-	jsonContent := content[jsonStart:jsonEnd]
+	jsonContent := responseContent[jsonStart:jsonEnd]
 
 	var analysis Analysis
 	if err := json.Unmarshal([]byte(jsonContent), &analysis); err != nil {
