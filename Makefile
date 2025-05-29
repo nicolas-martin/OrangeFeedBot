@@ -5,7 +5,7 @@ APP_NAME=orangefeed
 
 prod-build:
 	@GOOS=linux GOARCH=amd64 go build -o bin/$(APP_NAME) cmd/orangefeed/main.go
-	@scp ./bin/${APP_NAME} linode:/opt/${APP_NAME}
+	@scp ./bin/${APP_NAME} linode:/opt/${APP_NAME}/${APP_NAME}
 	@scp ./.env linode:/opt/${APP_NAME}/.env
 
 # Build the application
