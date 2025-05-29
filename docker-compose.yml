@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  truthsocial-bot:
+    build: .
+    container_name: truthsocial-bot
+    restart: unless-stopped
+    environment:
+      # Truth Social Configuration
+      - TRUTH_SOCIAL_USERNAME=${TRUTH_SOCIAL_USERNAME}
+      - TRUTH_SOCIAL_PASSWORD=${TRUTH_SOCIAL_PASSWORD}
+      
+      # OpenAI Configuration
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Telegram Configuration
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      
+      # Bot Configuration
+      - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-30}
+      - TARGET_USERNAME=${TARGET_USERNAME:-realDonaldTrump}
+    
+    # Mount volume for logs (optional)
+    volumes:
+      - ./logs:/app/logs
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "pgrep", "truthsocial-bot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Optional: Add a monitoring service
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - WATCHTOWER_CLEANUP=true
+  #     - WATCHTOWER_POLL_INTERVAL=3600
+  #   command: truthsocial-bot
+
+volumes:
+  logs:
+    driver: local 
