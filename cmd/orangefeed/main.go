@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"orangefeed/internal/analyzer"
@@ -35,13 +37,29 @@ func main() {
 	fmt.Println("🎯 Starting OrangeFeed - Truth Social Market Intelligence Bot")
 	fmt.Println(strings.Repeat("=", 70))
 
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Log when program exits
+	defer func() {
+		log.Println("🛑 OrangeFeed has been terminated. Goodbye!")
+	}()
+
 	bot, err := NewOrangeFeedBot()
 	if err != nil {
 		log.Fatal("Failed to initialize OrangeFeed bot:", err)
 	}
 
-	// Start the monitoring system
-	bot.Start()
+	// Start the monitoring system in a goroutine
+	go bot.Start()
+
+	// Wait for termination signal
+	sig := <-sigChan
+	log.Printf("🔔 Received signal: %v. Shutting down gracefully...", sig)
+
+	// Send shutdown notification to Telegram
+	bot.sendMessage("🛑 *OrangeFeed Bot Shutting Down*\n\nThe bot has been stopped and is no longer monitoring for new posts.")
 }
 
 func NewOrangeFeedBot() (*OrangeFeedBot, error) {
@@ -145,7 +163,6 @@ func (b *OrangeFeedBot) Start() {
 
 	// Keep the program running
 	log.Println("✅ OrangeFeed is running. Press Ctrl+C to stop.")
-	select {}
 }
 
 func (b *OrangeFeedBot) checkForNewPosts() {
