@@ -1,20 +1,14 @@
 package truthsocial
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
+	"github.com/Danny-Dasilva/CycleTLS/cycletls"
 )
 
 const (
@@ -30,10 +24,10 @@ const (
 )
 
 type Client struct {
-	http        *http.Client
+	client      cycletls.CycleTLS
+	accessToken string
 	user        string
 	pass        string
-	accessToken string
 }
 
 type Status struct {
@@ -67,60 +61,14 @@ type AuthResponse struct {
 	CreatedAt    int64  `json:"created_at"`
 }
 
-// Custom dialer that uses uTLS to mimic Chrome's TLS fingerprint
-func createUTLSDialer() func(network, addr string) (net.Conn, error) {
-	return func(network, addr string) (net.Conn, error) {
-		// Create a regular TCP connection
-		conn, err := net.Dial(network, addr)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse the address to get the hostname
-		host, _, err := net.SplitHostPort(addr)
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-
-		// Create uTLS connection with Chrome fingerprint
-		uConn := utls.UClient(conn, &utls.Config{
-			ServerName:         host,
-			InsecureSkipVerify: false,
-		}, utls.HelloChrome_Auto)
-
-		// Perform the TLS handshake
-		err = uConn.Handshake()
-		if err != nil {
-			conn.Close()
-			return nil, err
-		}
-
-		return uConn, nil
-	}
-}
-
 func NewClient(ctx context.Context, user, pass string) (*Client, error) {
-	jar, _ := cookiejar.New(nil)
-
-	// Create custom transport with uTLS
-	transport := &http.Transport{
-		Dial:                createUTLSDialer(),
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableCompression:  false,
-		DisableKeepAlives:   false,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
+	// Initialize CycleTLS client
+	client := cycletls.Init()
 
 	c := &Client{
-		http: &http.Client{
-			Jar:       jar,
-			Timeout:   45 * time.Second,
-			Transport: transport,
-		},
-		user: user,
-		pass: pass,
+		client: client,
+		user:   user,
+		pass:   pass,
 	}
 
 	// Authenticate using the same method as Truthbrush
@@ -133,9 +81,9 @@ func NewClient(ctx context.Context, user, pass string) (*Client, error) {
 
 func (c *Client) authenticate(ctx context.Context) error {
 	// Use the same authentication approach as Stanford Truthbrush
-	url := baseURL + "/oauth/token"
+	authURL := baseURL + "/oauth/token"
 
-	payload := map[string]string{
+	payload := map[string]interface{}{
 		"client_id":     clientID,
 		"client_secret": clientSecret,
 		"grant_type":    "password",
@@ -145,45 +93,40 @@ func (c *Client) authenticate(ctx context.Context) error {
 		"scope":         "read",
 	}
 
-	jsonPayload, err := json.Marshal(payload)
+	// Convert payload to JSON string
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
+	resp, err := c.client.Do(authURL, cycletls.Options{
+		Body:      string(payloadBytes),
+		Method:    "POST",
+		Ja3:       "771,4865-4866-4867-49195-49196-52393-49199-49200-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-45-43-21,29-23-24,0",
+		UserAgent: userAgent,
+		Headers: map[string]string{
+			"Content-Type":    "application/json",
+			"Accept":          "application/json",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Accept-Encoding": "gzip, deflate, br",
+			"DNT":             "1",
+			"Connection":      "keep-alive",
+			"Sec-Fetch-Dest":  "empty",
+			"Sec-Fetch-Mode":  "cors",
+			"Sec-Fetch-Site":  "same-origin",
+		},
+	}, "POST")
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("DNT", "1")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-
-	resp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("authentication request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := c.readResponseBody(resp)
-		return fmt.Errorf("authentication failed: %s - %s", resp.Status, string(bodyBytes))
+	if resp.Status != 200 {
+		return fmt.Errorf("authentication failed: status %d - %s", resp.Status, resp.Body)
 	}
 
 	var authResp AuthResponse
-	bodyBytes, err := c.readResponseBody(resp)
-	if err != nil {
-		return fmt.Errorf("failed to read auth response: %w", err)
-	}
-
-	if err := json.Unmarshal(bodyBytes, &authResp); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &authResp); err != nil {
 		return fmt.Errorf("failed to parse auth response: %w", err)
 	}
 
@@ -195,47 +138,37 @@ func (c *Client) authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) setStandardHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("DNT", "1")
-	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-
-	if c.accessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.accessToken)
-	}
-}
-
 func (c *Client) Lookup(ctx context.Context, username string) (*Account, error) {
 	username = strings.TrimPrefix(username, "@")
-	url := fmt.Sprintf("%s/v1/accounts/lookup?acct=%s", apiBaseURL, username)
+	lookupURL := fmt.Sprintf("%s/v1/accounts/lookup?acct=%s", apiBaseURL, username)
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-	c.setStandardHeaders(req)
+	resp, err := c.client.Do(lookupURL, cycletls.Options{
+		Method:    "GET",
+		Ja3:       "771,4865-4866-4867-49195-49196-52393-49199-49200-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-45-43-21,29-23-24,0",
+		UserAgent: userAgent,
+		Headers: map[string]string{
+			"Authorization":   "Bearer " + c.accessToken,
+			"Accept":          "application/json",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Accept-Encoding": "gzip, deflate, br",
+			"DNT":             "1",
+			"Connection":      "keep-alive",
+			"Sec-Fetch-Dest":  "empty",
+			"Sec-Fetch-Mode":  "cors",
+			"Sec-Fetch-Site":  "same-origin",
+		},
+	}, "GET")
 
-	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("account lookup request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := c.readResponseBody(resp)
-		return nil, fmt.Errorf("account lookup failed: %s - %s", resp.Status, string(bodyBytes))
+	if resp.Status != 200 {
+		return nil, fmt.Errorf("account lookup failed: status %d - %s", resp.Status, resp.Body)
 	}
 
 	var account Account
-	bodyBytes, err := c.readResponseBody(resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read account response: %w", err)
-	}
-
-	if err := json.Unmarshal(bodyBytes, &account); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &account); err != nil {
 		return nil, fmt.Errorf("failed to parse account data: %w", err)
 	}
 
@@ -275,29 +208,33 @@ func (c *Client) PullStatuses(ctx context.Context, username string, excludeRepli
 			statusURL += "?" + params.Encode()
 		}
 
-		req, _ := http.NewRequestWithContext(ctx, "GET", statusURL, nil)
-		c.setStandardHeaders(req)
+		resp, err := c.client.Do(statusURL, cycletls.Options{
+			Method:    "GET",
+			Ja3:       "771,4865-4866-4867-49195-49196-52393-49199-49200-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-45-43-21,29-23-24,0",
+			UserAgent: userAgent,
+			Headers: map[string]string{
+				"Authorization":   "Bearer " + c.accessToken,
+				"Accept":          "application/json",
+				"Accept-Language": "en-US,en;q=0.9",
+				"Accept-Encoding": "gzip, deflate, br",
+				"DNT":             "1",
+				"Connection":      "keep-alive",
+				"Sec-Fetch-Dest":  "empty",
+				"Sec-Fetch-Mode":  "cors",
+				"Sec-Fetch-Site":  "same-origin",
+			},
+		}, "GET")
 
-		resp, err := c.http.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("statuses request failed: %w", err)
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := c.readResponseBody(resp)
-			resp.Body.Close()
-			return nil, fmt.Errorf("statuses request failed: %s - %s", resp.Status, string(bodyBytes))
+		if resp.Status != 200 {
+			return nil, fmt.Errorf("statuses request failed: status %d - %s", resp.Status, resp.Body)
 		}
 
 		var statuses []Status
-		bodyBytes, err := c.readResponseBody(resp)
-		resp.Body.Close()
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to read statuses response: %w", err)
-		}
-
-		if err := json.Unmarshal(bodyBytes, &statuses); err != nil {
+		if err := json.Unmarshal([]byte(resp.Body), &statuses); err != nil {
 			return nil, fmt.Errorf("failed to parse statuses data: %w", err)
 		}
 
@@ -329,6 +266,9 @@ func (c *Client) PullStatuses(ctx context.Context, username string, excludeRepli
 		if pageCounter > 50 {
 			break
 		}
+
+		// Add a small delay between requests to be respectful
+		time.Sleep(500 * time.Millisecond)
 	}
 
 	return allStatuses, nil
@@ -336,47 +276,42 @@ func (c *Client) PullStatuses(ctx context.Context, username string, excludeRepli
 
 // GetStatuses is a simpler method for getting recent statuses
 func (c *Client) GetStatuses(ctx context.Context, accountID string, limit int) ([]Status, error) {
-	url := fmt.Sprintf("%s/v1/accounts/%s/statuses?limit=%d&exclude_replies=true&exclude_reblogs=true", apiBaseURL, accountID, limit)
+	statusURL := fmt.Sprintf("%s/v1/accounts/%s/statuses?limit=%d&exclude_replies=true&exclude_reblogs=true", apiBaseURL, accountID, limit)
 
-	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-	c.setStandardHeaders(req)
+	resp, err := c.client.Do(statusURL, cycletls.Options{
+		Method:    "GET",
+		Ja3:       "771,4865-4866-4867-49195-49196-52393-49199-49200-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-51-45-43-21,29-23-24,0",
+		UserAgent: userAgent,
+		Headers: map[string]string{
+			"Authorization":   "Bearer " + c.accessToken,
+			"Accept":          "application/json",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Accept-Encoding": "gzip, deflate, br",
+			"DNT":             "1",
+			"Connection":      "keep-alive",
+			"Sec-Fetch-Dest":  "empty",
+			"Sec-Fetch-Mode":  "cors",
+			"Sec-Fetch-Site":  "same-origin",
+		},
+	}, "GET")
 
-	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("statuses request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := c.readResponseBody(resp)
-		return nil, fmt.Errorf("statuses request failed: %s - %s", resp.Status, string(bodyBytes))
+	if resp.Status != 200 {
+		return nil, fmt.Errorf("statuses request failed: status %d - %s", resp.Status, resp.Body)
 	}
 
 	var statuses []Status
-	bodyBytes, err := c.readResponseBody(resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read statuses response: %w", err)
-	}
-
-	if err := json.Unmarshal(bodyBytes, &statuses); err != nil {
+	if err := json.Unmarshal([]byte(resp.Body), &statuses); err != nil {
 		return nil, fmt.Errorf("failed to parse statuses data: %w", err)
 	}
 
 	return statuses, nil
 }
 
-func (c *Client) readResponseBody(resp *http.Response) ([]byte, error) {
-	var reader io.Reader = resp.Body
-
-	// Handle gzip compression
-	if resp.Header.Get("Content-Encoding") == "gzip" {
-		gzipReader, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
-		}
-		defer gzipReader.Close()
-		reader = gzipReader
-	}
-
-	return io.ReadAll(reader)
+func (c *Client) Close() {
+	// Close the CycleTLS client
+	c.client.Close()
 }
