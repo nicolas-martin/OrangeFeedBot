@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"orangefeed/internal/analyzer"
-	"orangefeed/internal/truthsocial"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
+	"github.com/nicolas-martin/truthsocial-go/client"
 	"github.com/robfig/cron/v3"
 )
 
 type OrangeFeedBot struct {
 	telegramBot    *tgbotapi.BotAPI
-	truthClient    *truthsocial.Client
+	truthClient    *client.Client
 	analyzer       *analyzer.MarketAnalyzer
 	chatID         int64
 	targetUsername string
@@ -77,7 +77,7 @@ func NewOrangeFeedBot() (*OrangeFeedBot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	truthClient, err := truthsocial.NewClient(ctx, truthUsername, truthPassword)
+	truthClient, err := client.NewClient(ctx, truthUsername, truthPassword)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Truth Social client: %w", err)
 	}
@@ -202,7 +202,7 @@ func (b *OrangeFeedBot) checkForNewPosts() {
 	}
 }
 
-func (b *OrangeFeedBot) sendAnalysis(status truthsocial.Status, analysis *analyzer.Analysis) {
+func (b *OrangeFeedBot) sendAnalysis(status client.Status, analysis *analyzer.Analysis) {
 	content := b.cleanContent(status.Content)
 
 	// Create concise analysis message
